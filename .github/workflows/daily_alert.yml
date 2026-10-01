@@ -2,37 +2,28 @@ name: Live Stock Alert
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
-  workflow_dispatch:
-
-permissions:
-  contents: write
+    - cron: '*/15 * * * *'  # Prüft automatisch alle 15 Minuten
+  workflow_dispatch:        # Aktiviert den manuellen "Run workflow" Button
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
     steps:
-      - name: Code auschecken
+      - name: Code auslesen
         uses: actions/checkout@v4
 
       - name: Python einrichten
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.x'
 
-      - name: Abhängigkeiten installieren
-        run: pip install -r requirements.txt
+      - name: Bibliotheken installieren
+        run: |
+          pip install requests beautifulsoup4
 
       - name: Skript ausführen
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
         run: python main.py
-
-      - name: Cache speichern
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add sent_news.txt || true
-          git commit -m "Update sent news cache" || true
-          git push || true
