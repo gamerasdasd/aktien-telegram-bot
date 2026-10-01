@@ -8,23 +8,43 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 CACHE_FILE = "sent_news.txt"
 
-# Signalwörter zur Analyse der Haltedauer
-SHORT_TERM_KEYWORDS = ["earnings", "revenue", "soars", "plunges", "jump", "drop", "q1", "q2", "q3", "q4", "upgrade", "downgrade", "target price", "surge", "crash", "alert"]
-LONG_TERM_KEYWORDS = ["dividend", "buyback", "acquisition", "merger", "annual", "growth", "partnership", "ceo", "expansion", "strategic", "invest"]
+# Keywords für Analyse & Signal-Stärke
+BULLISH_KEYWORDS = ["soars", "beats", "surges", "record", "growth", "upgrade", "partnership", "buyback", "profit"]
+BEARISH_KEYWORDS = ["plunges", "misses", "drops", "crash", "downgrade", "investigation", "lawsuit", "loss", "warning"]
 
-def classify_trade_type(title: str) -> str:
-    """Prüft den Inhalt der Nachricht und gibt eine Empfehlung zur Haltedauer ab."""
+SHORT_TERM_KEYWORDS = ["earnings", "revenue", "q1", "q2", "q3", "q4", "target price", "surge", "crash", "guidance"]
+LONG_TERM_KEYWORDS = ["dividend", "acquisition", "merger", "annual", "ceo", "expansion", "strategic", "patent"]
+
+def analyze_headline(title: str):
+    """Analysiert die Schlagzeile und gibt Richtung, Haltedauer und Begründung zurück."""
     title_lower = title.lower()
     
+    # 1. Markt-Tendenz
+    is_bullish = any(kw in title_lower for kw in BULLISH_KEYWORDS)
+    is_bearish = any(kw in title_lower for kw in BEARISH_KEYWORDS)
+    
+    if is_bullish and not is_bearish:
+        sentiment = "🟢 *Tendenz:* Positiv (Potenzial nach oben)"
+    elif is_bearish:
+        sentiment = "🔴 *Tendenz:* Negativ (Vorsicht / Druck nach unten)"
+    else:
+        sentiment = "⚪️ *Tendenz:* Neutral / Abwarten"
+
+    # 2. Haltedauer & Handels-Fokus
     is_short = any(kw in title_lower for kw in SHORT_TERM_KEYWORDS)
     is_long = any(kw in title_lower for kw in LONG_TERM_KEYWORDS)
     
     if is_short:
-        return "⚡ *Empfehlung:* Rather KURZFRISTIG halten (Trading / Momentum)"
+        strategy = "⚡ *Haltedauer:* KURZFRISTIG (Trading / Momentum)"
+        reason = "💡 *Grund:* Reines News-Event (z. B. Zahlen/Upgrade) für schnelle Kursausschläge."
     elif is_long:
-        return "🛡 *Empfehlung:* Rather LANGFRISTIG halten (Buy & Hold / Investment)"
+        strategy = "🛡 *Haltedauer:* LANGFRISTIG (Buy & Hold)"
+        reason = "💡 *Grund:* Fundamentale Veränderung (z. B. Übernahme/Dividende) stärkt das Unternehmen nachhaltig."
     else:
-        return "📊 *Empfehlung:* MARKT-NEWS (Beobachten)"
+        strategy = "📊 *Haltedauer:* BEOBACHTEN"
+        reason = "💡 *Grund:* Allgemeine Markt-Meldung. Auf Ausbruch oder Volumen in Trade Republic achten."
+
+    return sentiment, strategy, reason
 
 def load_sent_news():
     if os.path.exists(CACHE_FILE):
@@ -90,13 +110,15 @@ if __name__ == "__main__":
     for news in reversed(latest_news):
         if news['hash'] not in sent_hashes:
             now_str = datetime.now().strftime("%H:%M Uhr")
-            recommendation = classify_trade_type(news['title'])
+            sentiment, strategy, reason = analyze_headline(news['title'])
             
-            msg = f"🚨 *NEUE EILMELDUNG* ({now_str})\n\n"
+            msg = f"🚨 *MARKT-RADAR EILMELDUNG* ({now_str})\n\n"
             msg += f"📰 *Titel:* [{news['title']}]({news['link']})\n"
             msg += f"⏱ *Zeit:* {news['time']}\n\n"
-            msg += f"{recommendation}\n\n"
-            msg += "📱 *Trade Republic:* Suche den Namen in deiner App."
+            msg += f"{sentiment}\n"
+            msg += f"{strategy}\n"
+            msg += f"{reason}\n\n"
+            msg += "📱 *Trade Republic:* Ticker/Name in der App prüfen."
             
             send_telegram_message(msg)
             sent_hashes.add(news['hash'])
