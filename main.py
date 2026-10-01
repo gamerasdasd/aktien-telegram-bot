@@ -1,10 +1,25 @@
 import os
+import hashlib
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+CACHE_FILE = "sent_news.txt"
+
+def load_sent_news():
+    """Lädt bereits gesendete News-Hashes aus der Datei."""
+    if os.path.exists(CACHE_FILE):
+        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+            return set(line.strip() for line in f if line.strip())
+    return set()
+
+def save_sent_news(sent_hashes):
+    """Speichert die aktualisierte Liste gesendeter News."""
+    with open(CACHE_FILE, "w", encoding="utf-8") as f:
+        for h in sent_hashes:
+            f.write(f"{h}\n")
 
 def send_telegram_message(message: str):
     """Sendet eine Nachricht an den Telegram-Chat."""
@@ -17,50 +32,62 @@ def send_telegram_message(message: str):
     }
     requests.post(url, json=payload)
 
-def fetch_finviz_news():
-    """Holt Schlagzeilen & Veröffentlichungszeiten von Finviz."""
+def fetch_latest_news():
+    """Holt Schlagzeilen von Finviz."""
     url = "https://finviz.com/news.ashx"
     headers = {'User-Agent': 'Mozilla/5.0'}
-    items = []
+    news_items = []
     
     try:
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.content, 'html.parser')
-        
         rows = soup.find_all('tr', class_='nn-row')
-        for row in rows[:5]:
+        
+        for row in rows[:10]:
             time_td = row.find('td', class_='nn-date')
             link_a = row.find('a', class_='nn-tab-link')
             
             if time_td and link_a:
                 post_time = time_td.text.strip()
                 title = link_a.text.strip()
-                items.append(f"⏱ *{post_time}* — {title}")
+                link = link_a.get('href', '')
+                
+                news_hash = hashlib.md5(title.encode('utf-8')).hexdigest()
+                
+                news_items.append({
+                    'hash': news_hash,
+                    'time': post_time,
+                    'title': title,
+                    'link': link
+                })
     except Exception as e:
-        print(f"Fehler Finviz: {e}")
+        print(f"Fehler beim Laden der News: {e}")
     
-    return items
-
-def generate_stock_report():
-    now_str = datetime.now().strftime("%d.%m.%Y um %H:%M Uhr UTC")
-    news_list = fetch_finviz_news()
-    
-    report = f"📈 *TÄGLICHER AKTIEN- & NEWS-RADAR* 🚀\n"
-    report += f"🗓 *Stand:* {now_str}\n\n"
-    report += "📰 *Aktuellste Eilmeldungen & Market-Moving News:*\n\n"
-    
-    if news_list:
-        for idx, item in enumerate(news_list, 1):
-            report += f"{idx}. {item}\n\n"
-    else:
-        report += "Keine aktuellen Nachrichten gefunden.\n\n"
-        
-    report += "💡 *Fokus:* Werte mit hohem Volumen und frischen News beobachten!"
-    return report
+    return news_items
 
 if __name__ == "__main__":
-    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
-        msg = generate_stock_report()
-        send_telegram_message(msg)
-    else:
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("Telegram-Zugangsdaten fehlen.")
+        exit(1)
+
+    sent_hashes = load_sent_news()
+    latest_news = fetch_latest_news()
+    new_count = 0
+
+    for news in reversed(latest_news):
+        if news['hash'] not in sent_hashes:
+            now_str = datetime.now().strftime("%H:%M Uhr")
+            
+            msg = f"🚨 *NEUE EILMELDUNG* ({now_str})\n\n"
+            msg += f"⏱ *Zeit:* {news['time']}\n"
+            msg += f"📰 *Titel:* [{news['title']}]({news['link']})"
+            
+            send_telegram_message(msg)
+            sent_hashes.add(news['hash'])
+            new_count += 1
+
+    if new_count > 0:
+        save_sent_news(sent_hashes)
+        print(f"{new_count} neue Nachricht(en) gesendet.")
+    else:
+        print("Keine neuen Nachrichten seit dem letzten Check.")
