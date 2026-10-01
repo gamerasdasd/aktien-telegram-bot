@@ -1,4 +1,5 @@
 import os
+import sys
 import hashlib
 import requests
 from bs4 import BeautifulSoup
@@ -16,10 +17,9 @@ SHORT_TERM_KEYWORDS = ["earnings", "revenue", "q1", "q2", "q3", "q4", "target pr
 LONG_TERM_KEYWORDS = ["dividend", "acquisition", "merger", "annual", "ceo", "expansion", "strategic", "patent"]
 
 def analyze_headline(title: str):
-    """Analysiert die Schlagzeile und gibt Richtung, Haltedauer und Begründung zurück."""
+    """Analysiert die Schlagzeile und gibt Tendenz, Haltedauer und Begründung zurück."""
     title_lower = title.lower()
     
-    # 1. Markt-Tendenz
     is_bullish = any(kw in title_lower for kw in BULLISH_KEYWORDS)
     is_bearish = any(kw in title_lower for kw in BEARISH_KEYWORDS)
     
@@ -30,7 +30,6 @@ def analyze_headline(title: str):
     else:
         sentiment = "⚪️ *Tendenz:* Neutral / Abwarten"
 
-    # 2. Haltedauer & Handels-Fokus
     is_short = any(kw in title_lower for kw in SHORT_TERM_KEYWORDS)
     is_long = any(kw in title_lower for kw in LONG_TERM_KEYWORDS)
     
@@ -39,7 +38,7 @@ def analyze_headline(title: str):
         reason = "💡 *Grund:* Reines News-Event (z. B. Zahlen/Upgrade) für schnelle Kursausschläge."
     elif is_long:
         strategy = "🛡 *Haltedauer:* LANGFRISTIG (Buy & Hold)"
-        reason = "💡 *Grund:* Fundamentale Veränderung (z. B. Übernahme/Dividende) stärkt das Unternehmen nachhaltig."
+        reason = "💡 *Grund:* Fundamentale Veränderung stärkt das Unternehmen nachhaltig."
     else:
         strategy = "📊 *Haltedauer:* BEOBACHTEN"
         reason = "💡 *Grund:* Allgemeine Markt-Meldung. Auf Ausbruch oder Volumen in Trade Republic achten."
@@ -77,7 +76,7 @@ def fetch_latest_news():
         soup = BeautifulSoup(response.content, 'html.parser')
         rows = soup.find_all('tr', class_='nn-row')
         
-        for row in rows[:10]:
+        for row in rows[:5]:
             time_td = row.find('td', class_='nn-date')
             link_a = row.find('a', class_='nn-tab-link')
             
@@ -101,18 +100,24 @@ def fetch_latest_news():
 if __name__ == "__main__":
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("Telegram-Zugangsdaten fehlen.")
-        exit(1)
+        sys.exit(1)
+
+    # Prüfen, ob der Durchlauf manuell oder automatisch gestartet wurde
+    is_manual_run = os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
 
     sent_hashes = load_sent_news()
     latest_news = fetch_latest_news()
     new_count = 0
 
     for news in reversed(latest_news):
-        if news['hash'] not in sent_hashes:
+        # Wenn manuell gestartet ODER die Nachricht neu ist -> senden!
+        if is_manual_run or (news['hash'] not in sent_hashes):
             now_str = datetime.now().strftime("%H:%M Uhr")
             sentiment, strategy, reason = analyze_headline(news['title'])
             
-            msg = f"🚨 *MARKT-RADAR EILMELDUNG* ({now_str})\n\n"
+            prefix = "🧪 *TEST-BENACHRICHTIGUNG*\n" if is_manual_run else "🚨 *MARKT-RADAR EILMELDUNG*\n"
+            
+            msg = f"{prefix}({now_str})\n\n"
             msg += f"📰 *Titel:* [{news['title']}]({news['link']})\n"
             msg += f"⏱ *Zeit:* {news['time']}\n\n"
             msg += f"{sentiment}\n"
@@ -126,6 +131,6 @@ if __name__ == "__main__":
 
     if new_count > 0:
         save_sent_news(sent_hashes)
-        print(f"{new_count} neue Nachricht(en) gesendet.")
+        print(f"{new_count} Nachricht(en) gesendet.")
     else:
         print("Keine neuen Nachrichten seit dem letzten Check.")
