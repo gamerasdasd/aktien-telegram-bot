@@ -9,7 +9,7 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 CACHE_FILE = "sent_news.txt"
 
-# Keywords für Analyse & Signal-Stärke
+# Keywords für Sentiment & Strategie
 BULLISH_KEYWORDS = ["soars", "beats", "surges", "record", "growth", "upgrade", "partnership", "buyback", "profit"]
 BEARISH_KEYWORDS = ["plunges", "misses", "drops", "crash", "downgrade", "investigation", "lawsuit", "loss", "warning"]
 
@@ -17,7 +17,6 @@ SHORT_TERM_KEYWORDS = ["earnings", "revenue", "q1", "q2", "q3", "q4", "target pr
 LONG_TERM_KEYWORDS = ["dividend", "acquisition", "merger", "annual", "ceo", "expansion", "strategic", "patent"]
 
 def analyze_headline(title: str):
-    """Analysiert die Schlagzeile und gibt Tendenz, Haltedauer und Begründung zurück."""
     title_lower = title.lower()
     
     is_bullish = any(kw in title_lower for kw in BULLISH_KEYWORDS)
@@ -102,7 +101,7 @@ if __name__ == "__main__":
         print("Telegram-Zugangsdaten fehlen.")
         sys.exit(1)
 
-    # Prüfen, ob der Durchlauf manuell oder automatisch gestartet wurde
+    # Erkenne, ob der Durchlauf manuell über "Run workflow" ausgelöst wurde
     is_manual_run = os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
 
     sent_hashes = load_sent_news()
@@ -110,7 +109,7 @@ if __name__ == "__main__":
     new_count = 0
 
     for news in reversed(latest_news):
-        # Wenn manuell gestartet ODER die Nachricht neu ist -> senden!
+        # Bei manuellem Run den Cache ignorieren und immer senden
         if is_manual_run or (news['hash'] not in sent_hashes):
             now_str = datetime.now().strftime("%H:%M Uhr")
             sentiment, strategy, reason = analyze_headline(news['title'])
