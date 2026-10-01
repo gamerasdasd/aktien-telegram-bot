@@ -1,9 +1,12 @@
-name: Daily Stock Alert
+name: Live Stock Alert
 
 on:
   schedule:
-    - cron: '0 7 * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   run-script:
@@ -25,3 +28,11 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python main.py
+
+      - name: Cache speichern
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add sent_news.txt || true
+          git commit -m "Update sent news cache" || true
+          git push || true
